@@ -111,7 +111,7 @@ jobs:
           docker exec ci-pg pg_isready -h 127.0.0.1 -U postgres
           docker exec ci-pg psql -U postgres -q -c 'CREATE DATABASE app_ci'
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
