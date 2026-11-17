@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Data (runtime)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ruff
+.ruff_cache/
+
+# Hypothesis
+.hypothesis/
+
+# Local CI
+.local-ci-commit.txt
+.local-ci-push.txt
+test-results/unit-tests.xml
+
+# Developer-local CI failure snapshots written by ad-hoc tooling.
+0*_recent_push_failure.txt
+
+# Sibling agent sessions use `git worktree add .worktrees/<slug>` (the hot-repo
+# convention in the parent CLAUDE.md). Untracked, these are embedded git
+# repositories, so a `git add -A` stages ANOTHER session's worktree gitlinks —
+# and any file they have mid-edit — into your commit. Observed 2026-08-04 in
+# video_analyzer_service; 11 of 19 w2v repos lacked this rule, all 19 had a
+# worktree on disk.
+.worktrees/

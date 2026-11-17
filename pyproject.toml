@@ -1,0 +1,165 @@
+[project]
+license = "Apache-2.0"
+name = "youtube-upload-service"
+version = "0.1.0"
+description = "YouTube upload microservice: OAuth2 authorization and async video upload"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[all]>=0.135.0",
+    "uvicorn[standard]>=0.41.0",
+    "psycopg[binary,pool]>=3.3.0",
+    "sqlalchemy[asyncio]>=2.0.48",
+    "pydantic>=2.12.0",
+    "pydantic-settings>=2.14.2",  # GHSA-4xgf-cpjx-pc3j fixed in 2.14.2
+    "python-dotenv>=1.2.0",
+    "redis>=7.3.0",
+    "alembic>=1.18.0",
+    "httpx>=0.28.0",
+    "cachetools>=7.0.0",
+    # 0.75.0 floor, not just a lock pin. Two distinct imports bind it:
+    #   * ``w2v_common.tenant`` (parse_tenant_id / MissingTenantError /
+    #     InvalidTenantIdError) + ``bind_session_tenant`` taking ``uuid.UUID | None``
+    #     — 0.67.0;
+    #   * ``w2v_common.auth.LICENSE_GATE`` / ``is_license_exempt_path`` (the
+    #     entitlement gate on the /api/auth + /api/upload routers) — 0.75.0.
+    # A lock is a point-in-time resolution, not a constraint — the next unrelated
+    # ``uv lock`` is free to walk this back to 0.74.x, which would fail at IMPORT
+    # (ImportError on LICENSE_GATE), not at type-check. The declared floor binds it.
+    "w2v-common>=0.75.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.20.0",
+    "google-auth-oauthlib>=1.2.0",
+
+    # --- Security floors on transitive dependencies ---
+    # cryptography is not imported by this service directly; it arrives through
+    # google-auth / google-auth-oauthlib and w2v-common. The lock resolves
+    # 50.0.0 today, but a lock is a point-in-time resolution, not a constraint:
+    # the next unrelated `uv lock` is free to walk an undeclared transitive back
+    # DOWN, silently, with green CI. The declared floor is the only thing that
+    # binds it — and this floor was ACTIVELY WRONG at >=42.0.0, i.e. it
+    # explicitly permitted an affected version.
+    #
+    # cryptography: CVE-2026-69247 (GHSA-g6cj-pr64-35w5) was introduced in
+    # 44.0.0 and fixed in 50.0.0, so anything in [44.0.0, 50.0.0) is affected.
+    # Matches the floor analysis_service (#175/#176) and kag_common record for
+    # the same CVE.
+    #
+    # No aiohttp floor is declared here on purpose: this repo resolves no
+    # aiohttp at all (`grep -c 'name = "aiohttp"' uv.lock` -> 0). Only declare
+    # floors for packages the repo actually resolves.
+    "cryptography>=50.0.0",
+]
+
+[project.scripts]
+youtube-upload-service = "src.asgi:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.0",
+    "pytest-timeout>=2.4.0",
+    "httpx>=0.28.0",
+    "ruff>=0.15.0",
+    "ty>=0.0.23",
+    "pip-audit>=2.10.0",
+    # pip is a transitive dep of pip-audit (pip-audit -> pip-api -> pip).
+    # Explicit floor: pip < 26.2 is vulnerable to PYSEC-2026-3721.
+    "pip>=26.2",
+    "detect-secrets>=1.5.0",
+    "bandit>=1.9.4",
+    "fakeredis>=2.34.0",
+]
+
+[tool.uv]
+# Security constraint: pyasn1 0.6.3 (transitive via pyasn1-modules → rsa/google-auth)
+# has PYSEC-2026-3455/3456/3457; 0.6.4 is the fix. Constraint keeps the transitive
+# pin at/above the patched release without adding a direct dependency.
+constraint-dependencies = ["pyasn1>=0.6.5"]
+
+[tool.uv.sources]
+# The published source tree resolves its shared library from the public
+# repository at the release tag; the private index is not reachable here.
+w2v-common = { git = "https://github.com/nonagenticai/w2v_common", tag = "v0.115.4" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "N", "W", "UP", "ANN", "B", "BLE", "A", "S", "C901",
+    "RUF", "RET", "SIM", "ASYNC", "PTH", "TID251",
+]
+ignore = [
+    "E501",
+    "B008",
+    "ASYNC240",
+    "ASYNC109"
+]
+
+# uuid7 is the id standard (stdlib, py3.14). TID251 bans `uuid4` in production
+# code via ruff — enforced in CI (`ruff check .`), not only local pre-commit.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"uuid.uuid4".msg = "uuid7 is the w2v id standard — use uuid.uuid7() (stdlib, py3.14)."
+
+[tool.ruff.lint.per-file-ignores]
+"src/database/migrations/*" = ["I001", "ANN"]
+"src/asgi.py" = ["E402"]
+"tests/**/*.py" = ["S101", "S104", "S105", "S106", "S107", "S108", "ANN", "PTH", "ASYNC230", "ASYNC240", "SIM117", "TID251"]
+
+# ── ANN401 ratchet (see [tool.ruff.lint].ignore note) ─────────────────────────
+# These files still carry `Any` in a function signature. Do NOT add to this list.
+# When you type a file's seam with pydantic models, DELETE its line here — that
+# re-enables ANN401 for the file and locks the win in. Target: empty.
+"src/api/upload_routes.py" = ["ANN401"]
+"src/services/youtube_service.py" = ["ANN401"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "unit: unit tests",
+    "integration: integration tests",
+]
+filterwarnings = [
+    "ignore:coroutine '.*AsyncMockMixin._execute_mock_call.*' was never awaited:RuntimeWarning",
+]
+
+[tool.coverage.run]
+omit = ["src/database/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 80
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.rules]
+import-not-found = "error"
+unresolved-reference = "error"
+missing-attribute = "error"
+possibly-unresolved-reference = "error"
+possibly-missing-attribute = "error"
+missing-argument = "error"
+invalid-argument-type = "error"
+invalid-explicit-return = "error"
+
+[tool.bandit]
+targets = ["src/"]
+exclude_dirs = ["tests", ".venv", "migrations"]
+skips = ["B311"]
+
+[tool.bandit.assert_used]
+skips = ["*/tests/*"]

@@ -1,0 +1,78 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.5  # match uv.lock (ruff 0.17.5)
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        args: [--ignore, DL3008, --ignore, DL3013, --ignore, DL3015]
+
+  # Secret scanning: the published tree ships no `.secrets.baseline` (it is
+  # estate-specific); the betterleaks `secret-scan` job in ci-public.yml replaces it.
+
+  - repo: local
+    hooks:
+      - id: ty-check
+        name: ty type check
+        entry: env UV_CACHE_DIR=.uv-cache uv run ty check .
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
+
+      # MOVED OFF THE COMMIT PATH 2026-08-20 -- stages: [manual], not [pre-commit].
+      #
+      # This ran the ENTIRE suite on every commit (pass_filenames: false), single-process. On
+      # a shared dev box running ~36 Claude sessions that became the binding constraint on
+      # shipping: measured that day, load ~80-110 with swap near-full, and commits were being
+      # killed mid-hook -- one `git commit` was OOM-killed at exit 144 after the hook had run
+      # for 1h29m. jetsam takes the whole process group, so a retry loop in a detached shell
+      # does not survive either. The gate had stopped protecting main and was preventing
+      # anything from reaching it.
+      #
+      # CI already runs this same suite. The public workflow
+      # `.github/workflows/ci-public.yml` has a `pytest` step running
+      # `uv run pytest -q` on every push and PR, so CI runs the same tests/ tree that
+      # used to run here. This is the gate MOVING, not being removed.
+      #
+      # Still runnable deliberately:
+      #     pre-commit run pytest-unit --hook-stage manual --all-files
+      # Targeted checks on the lines you touched stay local and stay cheap:
+      #     uv run pytest tests/path/to/test_thing.py
+      - id: pytest-unit
+        name: pytest unit tests
+        entry: env UV_CACHE_DIR=.uv-cache uv run pytest tests/ -x --tb=short
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [manual]
+      - id: bandit
+        name: bandit security scan
+        entry: env UV_CACHE_DIR=.uv-cache uv run bandit -r src/ -c pyproject.toml
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: pip-audit
+        name: pip-audit security scan (uv-export → pip-audit)
+        entry: scripts/pip-audit.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

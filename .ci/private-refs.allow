@@ -1,0 +1,25 @@
+# Allowlist for scripts/ci/no-private-refs.sh — a security decision, not a convenience.
+#
+# One rule per line, `path/glob:pattern  # justification`. The glob matches the repo-relative
+# path; the pattern is an ERE matched against the whole `git grep` hit (`path:line:text`).
+# Blank lines and `#` comments are ignored. A justification is mandatory in review.
+#
+# ⛔ Do NOT add an entry to keep a real internal hostname, address or private repository path
+# in a public tree. Remove it instead. An entry is only for a string that *looks* private but
+# is not: a documented loopback example, a placeholder, or a term that collides with a rule.
+#
+# The guard and this file necessarily spell the patterns out; the guard excludes both from
+# its own scan. Everything else is scanned.
+#
+# No entries by default. An empty file that fails the build is the correct starting state.
+
+# ── the SSRF/private-range guard and its tests ───────────────────────────────────────
+# These files ARE the guard: the .internal names and CGNAT addresses below are the values
+# the guard must REJECT. No estate host is named (real tailnet addresses were replaced
+# with generic 100.64.0.x). Precedent: w2v_common tests/test_net_safe_fetch.py.
+src/services/url_guard.py:\.internal([^A-Za-z0-9_(]|$)
+src/services/url_guard.py:100\.64\.
+tests/unit/test_url_guard.py:\.internal([^A-Za-z0-9_(]|$)
+tests/unit/test_url_guard.py:100\.64\.
+src/services/url_guard.py:100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.
+tests/unit/test_url_guard.py:100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.
